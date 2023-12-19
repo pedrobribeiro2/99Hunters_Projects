@@ -1,0 +1,84 @@
+function replaceTextInSlides() {
+    // ID da sua Planilha do Google Sheets e do Google Slides
+    var sheetId = '19amRaLry8ch2tBDJPS2vPJLT-1MNwOzzGCbKU8pfoP0';
+    var slidesId = '1v0o2ZQ3NnOG85uoh3SgWNpo1Jg_2-2ijm19h_11Z0zs';
+
+    // Abrir a Planilha e ler os dados
+    var sheet = SpreadsheetApp.openById(sheetId).getActiveSheet();
+    var data = sheet.getDataRange().getValues();
+
+    // Operar apenas na primeira linha de dados
+    var rowData = data[6]; // 1 = Primeira linha após o cabeçalho
+
+     // Criar uma cópia do template do Google Slides
+    var presentation = DriveApp.getFileById(slidesId);
+    var newPresentationFile = presentation.makeCopy('Apresentação para ' + rowData[1]); // Assume que a primeira coluna é o nome
+    var newPresentation = SlidesApp.openById(newPresentationFile.getId());
+    var newSlides = newPresentation.getSlides();
+
+    // Substituir as tags nos Slides pela informação correspondente da linha atual
+    for (var j = 0; j < newSlides.length; j++) {
+        replaceTagsInSlide(newSlides[j], rowData);
+    }
+
+    // Aguardar um tempo para garantir que as mudanças sejam salvas
+    //Utilities.sleep(5000); // Aguarda 5 segundos
+
+    //Save the modified presentation
+    newPresentation.saveAndClose();
+    
+    // Obter ou criar a pasta onde os PDFs serão salvos
+    var folderName = '2023 12 99Hunters Wrapped'; // Substitua pelo nome da sua pasta
+    var folders = DriveApp.getFoldersByName(folderName);
+    var folder;
+    if (folders.hasNext()) {
+      folder = folders.next();
+    } else {
+      folder = DriveApp.createFolder(folderName);
+    }
+    // Salvar o PDF na pasta especificada
+    var pdfBlob = newPresentationFile.getAs(MimeType.PDF);
+    var pdfFile = folder.createFile(pdfBlob).setName('['+ rowData[0] + ']' + ' ' + 'Retrospectiva 2023 de ' + rowData[1] + '.pdf');
+
+    // Excluir a cópia da apresentação no Google Slides
+    newPresentationFile.setTrashed(true);
+    
+}
+
+function replaceTagsInSlide(slide, rowData) {
+    var tagToIndexMap = {
+        '<<<Full_Name>>>': 1, // Substitua 1 pelo índice correto da coluna em sua planilha
+        '02': 2, //<<<Total_Jobs_Trabalhados>>>
+        'Agosto, Novembro e Setembro': 10, //<<<Top_3_Active_Months>>>
+        '03': 3, //<<<Total_Recommendations>>>
+        '9': 9,	//<<<Percentile>>>
+        '04': 4,	//<<<Total_Shortlisted>>>
+        '05': 5,	//<<<Total_Interviewed>>>
+        '06': 6, //<<<Total_Hired>>>
+        '07': 7, //<<<Earnings_2023>>>	
+        '<<<Ranking>>>': 8,	
+        // Adicione mais mapeamentos conforme necessário
+    };
+
+    // Substituir as tags no slide
+    for (var tag in tagToIndexMap) {
+        var value = rowData[tagToIndexMap[tag]];
+
+        // Formatar a string para a coluna Top_3_Active_Months
+        if (tag === '<<<Top_3_Active_Months>>>') {
+            value = formatMonthsString(value);
+        }
+
+        slide.replaceAllText(tag, value);
+    }
+}
+
+// Função para formatar a string de meses
+function formatMonthsString(monthsString) {
+    var months = monthsString.split(', ');
+    if (months.length > 1) {
+        // Juntar todos os meses com vírgulas, exceto o último, que é unido com "e"
+        return months.slice(0, -1).join(', ') + ' e ' + months[months.length - 1];
+    }
+    return monthsString; // Retorna a string original se houver apenas um mês
+}
