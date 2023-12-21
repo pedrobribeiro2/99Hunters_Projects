@@ -1,108 +1,152 @@
+// Declarando varáveis
+
+var sheetId = '1fyB-S2ohwbxqLVc_YSsNgHKx0LYdlTfr3ey6U5PTvAQ';
+var slidesId = '1v0o2ZQ3NnOG85uoh3SgWNpo1Jg_2-2ijm19h_11Z0zs';
+var shareSlidesId = '1YRq1MkHKM5ktgKq-yYa6NIE-18SvCcV1YsrDnXbcn9A';
+
+var sheet = SpreadsheetApp.openById(sheetId).getActiveSheet();
+var data = sheet.getDataRange().getValues();
+
+var folderName = '2023 12 99Hunters Wrapped';
+var folders = DriveApp.getFoldersByName(folderName);
+var mainFolder = folders.hasNext() ? folders.next() : DriveApp.createFolder(folderName);
+
+var subFolderName = 'Hunter_pdfs';
+var subFolders = mainFolder.getFoldersByName(subFolderName);
+var subFolder = subFolders.hasNext() ? subFolders.next() : mainFolder.createFolder(subFolderName);
+
+
 function replaceTextInSlides() {
-    // Log inicial
     Logger.log("Iniciando a função replaceTextInSlides");
+    for (var i = 1; i < data.length; i++) {
+        Logger.log("Processando linha: " + i);
+        var rowData = data[i];
 
-    // ID da sua Planilha do Google Sheets e do Google Slides
-    var sheetId = '1fyB-S2ohwbxqLVc_YSsNgHKx0LYdlTfr3ey6U5PTvAQ';
-    var slidesId = '1v0o2ZQ3NnOG85uoh3SgWNpo1Jg_2-2ijm19h_11Z0zs';
+        if (rowData[3] == 0) {
+            Logger.log("Hunter não fez nenhuma recomendação para a linha " + i);
+            continue;
+        }
 
-    // Abrir a Planilha e ler os dados
-    Logger.log("Abrindo a planilha");
-    var sheet = SpreadsheetApp.openById(sheetId).getActiveSheet();
-    var data = sheet.getDataRange().getValues();
-    Logger.log("Quantidade de linhas obtidas: " + data.length);
+        Logger.log("Processando apresentações para a linha " + i);
+        var presentationFileId = processPresentation(slidesId, 'Apresentação para ', rowData, subFolder);
+        var sharePresentationFileId = processPresentation(shareSlidesId, 'Compartilhamento para ', rowData, subFolder);
 
-    // Operar apenas na primeira linha de dados
-    var rowData = data[7]; // 1 = Primeira linha após o cabeçalho
-    Logger.log("Processando a linha: " + rowData);
+        var slideIndexToExport = selectSlideToExport(rowData);
+        if (slideIndexToExport != null) {
+            Logger.log("Exportando slide como imagem");
+            exportSlideAsImage(sharePresentationFileId, slideIndexToExport, subFolder, rowData);
+        } else {
+            Logger.log("Nenhum slide selecionado para exportação");
+        }
 
-     // Criar uma cópia do template do Google Slides
-     Logger.log("Criando cópia do template do Google Slides");
-    var presentation = DriveApp.getFileById(slidesId);
-    var newPresentationFile = presentation.makeCopy('Apresentação para ' + rowData[1]); // Assume que a primeira coluna é o nome
-    var newPresentation = SlidesApp.openById(newPresentationFile.getId());
-    // Verificação se a apresentação foi aberta
-    if(newPresentation) {
-        Logger.log("Apresentação criada e aberta com sucesso");
-    } else {
-        Logger.log("Erro ao abrir a apresentação");
+        // Lembre-se de mover para a lixeira usando o ID, não o objeto de arquivo
+        DriveApp.getFileById(presentationFileId).setTrashed(true);
+        DriveApp.getFileById(sharePresentationFileId).setTrashed(true);
     }
+    Logger.log("Script replaceTextInSlides concluído");
+}
+
+function processPresentation(currentSlidesId, prefix, rowData, subFolder) {
+    Logger.log("Iniciando processamento da apresentação: " + prefix);
+    var presentation = DriveApp.getFileById(currentSlidesId);
+    var newPresentationFile = presentation.makeCopy(prefix + rowData[1]);
+    var newPresentation = SlidesApp.openById(newPresentationFile.getId());
     var newSlides = newPresentation.getSlides();
 
-    // Substituir as tags nos Slides pela informação correspondente da linha atual
     for (var j = 0; j < newSlides.length; j++) {
-        Logger.log("Substituindo tags no slide " + (j + 1));
         replaceTagsInSlide(newSlides[j], rowData);
     }
 
-    // Aguardar um tempo para garantir que as mudanças sejam salvas
-    //Utilities.sleep(5000); // Aguarda 5 segundos
-
-    //Save the modified presentation
-    Logger.log("Salvando e fechando a apresentação modificada");
     newPresentation.saveAndClose();
-    
-    // Obter ou criar a pasta onde os PDFs serão salvos
-    Logger.log("Obtendo ou criando a pasta para salvar os PDFs");
-    var folderName = '2023 12 99Hunters Wrapped'; // Substitua pelo nome da sua pasta
-    var folders = DriveApp.getFoldersByName(folderName);
-    var folder;
-    if (folders.hasNext()) {
-      folder = folders.next();
-    } else {
-      folder = DriveApp.createFolder(folderName);
+
+    // Salvar como PDF apenas se for a apresentação completa (slidesId)
+    if (currentSlidesId === slidesId) {
+        Logger.log("Salvando apresentação como PDF");
+        var pdfBlob = newPresentationFile.getAs(MimeType.PDF);
+        subFolder.createFile(pdfBlob).setName('[' + rowData[0] + '] ' + 'Retrospectiva 2023 de ' + rowData[1] + '.pdf');
     }
-    // Salvar o PDF na pasta especificada
-    Logger.log("Salvando o PDF na pasta");
-    var pdfBlob = newPresentationFile.getAs(MimeType.PDF);
-    var pdfFile = folder.createFile(pdfBlob).setName('['+ rowData[0] + ']' + ' ' + 'Retrospectiva 2023 de ' + rowData[1] + '.pdf');
-    Logger.log("PDF salvo: " + pdfFile.getName());
 
-    // Excluir a cópia da apresentação no Google Slides
-    Logger.log("Excluindo a cópia da apresentação no Google Slides");
-    newPresentationFile.setTrashed(true);
+    Logger.log("Apresentação processada e salva como PDF");
+    return newPresentationFile.getId();
+}
 
-    Logger.log("Script concluído");
+function selectSlideToExport(rowData) {
+    Logger.log("Selecionando slide para exportação com base nos dados: " + rowData);
+
+    if (rowData[9] < 6) {
+        return rowData[6] != 0 ? 0 : 2;
+    } else if (rowData[4] != 0 && rowData[5] != 0 && rowData[6] != 0) {
+        return 1;
+    } else if (rowData[6] == 0) {
+        return 3;
+    } else if (rowData[5] == 0 && rowData[6] == 0) {
+        return 4;
+    } else if (rowData[4] == 0 && rowData[5] == 0 && rowData[6] == 0) {
+        return 5;
+    }
+    Logger.log("Slide selecionado: " + (slideIndexToExport != null ? slideIndexToExport : "Nenhum"));
+
+    return null;
     
 }
 
+function exportSlideAsImage(shareSlidesId, slideIndex, subFolder, rowData) {
+    Logger.log("Iniciando a exportação do slide como imagem");
+
+    // Abrir a apresentação e obter o slide específico
+    Logger.log("Abrindo apresentação com ID: " + shareSlidesId);
+    const presentation = SlidesApp.openById(shareSlidesId);
+    const slides = presentation.getSlides();
+    Logger.log("Total de slides na apresentação: " + slides.length);
+
+    if (slides.length <= slideIndex) {
+        Logger.log("Índice de slide inválido: " + slideIndex);
+        return;
+    }
+
+    const slide = slides[slideIndex];
+    Logger.log("Obtendo thumbnail para o slide de índice: " + slideIndex);
+
+    // Exportar o slide como uma imagem PNG
+    try {
+        const thumbnailUrl = Slides.Presentations.Pages.getThumbnail(shareSlidesId, slide.getObjectId(), {"thumbnailProperties.mimeType": "PNG"}).contentUrl;
+        Logger.log("URL do thumbnail: " + thumbnailUrl);
+        const blob = UrlFetchApp.fetch(thumbnailUrl).getBlob();
+        blob.setName('[' + rowData[0] + '] ' + 'Para Compartilhar - Retrospectiva 2023 de ' + rowData[1] + '.png');
+        Logger.log("Salvando imagem na pasta: " + subFolder.getName());
+        subFolder.createFile(blob);
+        Logger.log("Slide exportado como imagem PNG");
+    } catch (e) {
+        Logger.log("Erro ao exportar o slide como imagem: " + e.toString());
+    }
+}
 
 function replaceTagsInSlide(slide, rowData) {
+    Logger.log("Iniciando substituição de tags no slide");
     var tagToIndexMap = {
-        '<<<First_Name>>>': 1, // Substitua 1 pelo índice correto da coluna em sua planilha
+        '<<<First_Name>>>': 1, // e outros mapeamentos
         'X2': 2, //<<<Total_Jobs_Trabalhados>>>
         'Agosto, Novembro e Setembro': 10, //<<<Top_3_Active_Months>>>
-        '03': 3, //<<<Total_Recommendations>>>
+        '030': 3, //<<<Total_Recommendations>>>
         '09': 9,	//<<<Percentile>>>
         '04': 4,	//<<<Total_Shortlisted>>>
         '05': 5,	//<<<Total_Interviewed>>>
         '06': 6, //<<<Total_Hired>>>
-        //'5000,78': 7, //<<<Earnings_2023>>>	
-        //'<<<Ranking>>>': 8,	
-        // Adicione mais mapeamentos conforme necessário
     };
 
-    // Substituir as tags no slide
     for (var tag in tagToIndexMap) {
         var value = rowData[tagToIndexMap[tag]];
-
-        // Formatar a string para a coluna Top_3_Active_Months
         if (tag === 'Agosto, Novembro e Setembro') {
             value = formatMonthsString(value);
         }
-
         slide.replaceAllText(tag, value);
     }
 }
 
-// Função para formatar a string de meses
 function formatMonthsString(monthsString) {
     var months = monthsString.split(', ');
     if (months.length > 1) {
-        // Juntar todos os meses com vírgulas, exceto o último, que é unido com "e"
         return months.slice(0, -1).join(', ') + ' e ' + months[months.length - 1];
     }
-    return monthsString; // Retorna a string original se houver apenas um mês
+    return monthsString;
 }
-
-
