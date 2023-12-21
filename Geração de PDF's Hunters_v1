@@ -1,0 +1,108 @@
+function replaceTextInSlides() {
+    // Log inicial
+    Logger.log("Iniciando a função replaceTextInSlides");
+
+    // ID da sua Planilha do Google Sheets e do Google Slides
+    var sheetId = '1fyB-S2ohwbxqLVc_YSsNgHKx0LYdlTfr3ey6U5PTvAQ';
+    var slidesId = '1v0o2ZQ3NnOG85uoh3SgWNpo1Jg_2-2ijm19h_11Z0zs';
+
+    // Abrir a Planilha e ler os dados
+    Logger.log("Abrindo a planilha");
+    var sheet = SpreadsheetApp.openById(sheetId).getActiveSheet();
+    var data = sheet.getDataRange().getValues();
+    Logger.log("Quantidade de linhas obtidas: " + data.length);
+
+    // Operar apenas na primeira linha de dados
+    var rowData = data[7]; // 1 = Primeira linha após o cabeçalho
+    Logger.log("Processando a linha: " + rowData);
+
+     // Criar uma cópia do template do Google Slides
+     Logger.log("Criando cópia do template do Google Slides");
+    var presentation = DriveApp.getFileById(slidesId);
+    var newPresentationFile = presentation.makeCopy('Apresentação para ' + rowData[1]); // Assume que a primeira coluna é o nome
+    var newPresentation = SlidesApp.openById(newPresentationFile.getId());
+    // Verificação se a apresentação foi aberta
+    if(newPresentation) {
+        Logger.log("Apresentação criada e aberta com sucesso");
+    } else {
+        Logger.log("Erro ao abrir a apresentação");
+    }
+    var newSlides = newPresentation.getSlides();
+
+    // Substituir as tags nos Slides pela informação correspondente da linha atual
+    for (var j = 0; j < newSlides.length; j++) {
+        Logger.log("Substituindo tags no slide " + (j + 1));
+        replaceTagsInSlide(newSlides[j], rowData);
+    }
+
+    // Aguardar um tempo para garantir que as mudanças sejam salvas
+    //Utilities.sleep(5000); // Aguarda 5 segundos
+
+    //Save the modified presentation
+    Logger.log("Salvando e fechando a apresentação modificada");
+    newPresentation.saveAndClose();
+    
+    // Obter ou criar a pasta onde os PDFs serão salvos
+    Logger.log("Obtendo ou criando a pasta para salvar os PDFs");
+    var folderName = '2023 12 99Hunters Wrapped'; // Substitua pelo nome da sua pasta
+    var folders = DriveApp.getFoldersByName(folderName);
+    var folder;
+    if (folders.hasNext()) {
+      folder = folders.next();
+    } else {
+      folder = DriveApp.createFolder(folderName);
+    }
+    // Salvar o PDF na pasta especificada
+    Logger.log("Salvando o PDF na pasta");
+    var pdfBlob = newPresentationFile.getAs(MimeType.PDF);
+    var pdfFile = folder.createFile(pdfBlob).setName('['+ rowData[0] + ']' + ' ' + 'Retrospectiva 2023 de ' + rowData[1] + '.pdf');
+    Logger.log("PDF salvo: " + pdfFile.getName());
+
+    // Excluir a cópia da apresentação no Google Slides
+    Logger.log("Excluindo a cópia da apresentação no Google Slides");
+    newPresentationFile.setTrashed(true);
+
+    Logger.log("Script concluído");
+    
+}
+
+
+function replaceTagsInSlide(slide, rowData) {
+    var tagToIndexMap = {
+        '<<<First_Name>>>': 1, // Substitua 1 pelo índice correto da coluna em sua planilha
+        'X2': 2, //<<<Total_Jobs_Trabalhados>>>
+        'Agosto, Novembro e Setembro': 10, //<<<Top_3_Active_Months>>>
+        '03': 3, //<<<Total_Recommendations>>>
+        '09': 9,	//<<<Percentile>>>
+        '04': 4,	//<<<Total_Shortlisted>>>
+        '05': 5,	//<<<Total_Interviewed>>>
+        '06': 6, //<<<Total_Hired>>>
+        //'5000,78': 7, //<<<Earnings_2023>>>	
+        //'<<<Ranking>>>': 8,	
+        // Adicione mais mapeamentos conforme necessário
+    };
+
+    // Substituir as tags no slide
+    for (var tag in tagToIndexMap) {
+        var value = rowData[tagToIndexMap[tag]];
+
+        // Formatar a string para a coluna Top_3_Active_Months
+        if (tag === 'Agosto, Novembro e Setembro') {
+            value = formatMonthsString(value);
+        }
+
+        slide.replaceAllText(tag, value);
+    }
+}
+
+// Função para formatar a string de meses
+function formatMonthsString(monthsString) {
+    var months = monthsString.split(', ');
+    if (months.length > 1) {
+        // Juntar todos os meses com vírgulas, exceto o último, que é unido com "e"
+        return months.slice(0, -1).join(', ') + ' e ' + months[months.length - 1];
+    }
+    return monthsString; // Retorna a string original se houver apenas um mês
+}
+
+
