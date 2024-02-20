@@ -1,4 +1,4 @@
-function enviarEmails(apenasPrimeiraLinha) {
+function enviarEmails(apenasPrimeiraLinha, linhaInicio) {
   Logger.log("Iniciando a função enviarEmails");
   var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   var disparoEmailsSheet = spreadsheet.getSheetByName("Disparo de E-mails");
@@ -7,9 +7,10 @@ function enviarEmails(apenasPrimeiraLinha) {
   var emailTemplatePrimeiraFatura = getTemplateFromDrive(folderId, 'E-mail para Primeira Fatura.html');
   var emailTemplateRPA = getTemplateFromDrive(folderId, 'E-mail para RPA.html');
   var emailTemplateNF = getTemplateFromDrive(folderId, 'E-mail para NF.html');
-  var numLinhas = apenasPrimeiraLinha ? 1 : disparoEmailsSheet.getLastRow() - 1;
-
-  var data = disparoEmailsSheet.getRange(2, 1, numLinhas, 8).getValues();
+  var linhaInicial = linhaInicio || 2; // Se linhaInicio não for fornecido, usa 2 como padrão
+  var numLinhas = apenasPrimeiraLinha ? 1 : disparoEmailsSheet.getLastRow() - linhaInicial + 1;
+  var data = disparoEmailsSheet.getRange(linhaInicial, 1, numLinhas, 8).getValues();
+  
   Logger.log("Dados da planilha carregados: " + data.length + " linhas");
   
   function salvarComoExcel(sheet, folderId, fileName, isRPA) {
@@ -167,7 +168,7 @@ for (var i = 0; i < data.length; i++) {
         continue;
     }
     if (logMessage) {
-        disparoEmailsSheet.getRange(i + 2, 8).setValue(logMessage); // Coluna H é a coluna 8
+        disparoEmailsSheet.getRange(linhaInicial + i, 8).setValue(logMessage); //
         SpreadsheetApp.flush(); // Garante que a planilha seja atualizada imediatamente
     }
 
@@ -179,11 +180,30 @@ for (var i = 0; i < data.length; i++) {
 function onOpen() {
   var ui = SpreadsheetApp.getUi();
   ui.createMenu('Automação de E-mails')
-      .addItem('Teste', 'testePrimeiraLinha')
+      .addItem('Testar com Primeira Linha', 'testePrimeiraLinha')
       .addItem('Disparar E-mails', 'enviarEmails')
+      .addItem('Continuar de uma linha específica', 'continuarDeUmaLinhaEspecifica')
       .addItem('Fazer Backup e Limpar Planilha', 'limparPlanilha')
       .addToUi();
 }
+
+function continuarDeUmaLinhaEspecifica() {
+  var ui = SpreadsheetApp.getUi();
+  var resposta = ui.prompt('Continuar a partir de qual linha?', ui.ButtonSet.OK_CANCEL);
+
+  if (resposta.getSelectedButton() == ui.Button.OK) {
+    var linha = parseInt(resposta.getResponseText());
+    if (!isNaN(linha) && linha > 1) {
+      enviarEmails(false, linha);
+      ui.alert('Execução concluída a partir da linha ' + linha);
+    } else {
+      ui.alert('Por favor, insira um número de linha válido maior que 1.');
+    }
+  } else {
+    ui.alert('Operação cancelada.');
+  }
+}
+
 
 function limparPlanilha() {
   var ui = SpreadsheetApp.getUi();
